@@ -7,133 +7,153 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-struct client_info {
-	int sockno;
-	char ip[INET_ADDRSTRLEN];
-	
-	char target[100];
-	
-	
-	
-};
 
+#define MAX 100
 
-int clients[100];
-int n = 0;
+// user mapping: username -> socket
+// required for private message routing
+typedef struct {
+    char name[100];
+    int sock;
+} user_t;
+
+user_t users[MAX];
+int user_count = 0;
+
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-void send_to_all(char *msg,int curr, char target[100])
+// find socket using username
+int find_socket(char *name)
 {
-	
-	pthread_mutex_lock(&mutex);
-	for(int i = 0; i < n; i++) {
-		if(clients[i] /*== target*/!=curr) {
-			if(send(clients[i],msg,strlen(msg),0) < 0) {
-				perror("sending failure");
-				continue;
-			}
-		}
-	}
-	pthread_mutex_unlock(&mutex);
+    for (int i = 0; i < user_count; i++) {
+        if (strcmp(users[i].name, name) == 0)
+            return users[i].sock;
+    }
+    return -1;
 }
 
-
-
-
-void * thread_recv_msg(void *sock)
+// thread handling one client
+void *handle_client(void *arg)
 {
-	struct client_info cl = *((struct client_info *)sock);
-	char msg[500];
-	int len;
-	int i;
-	int j;
-	while((len = recv(cl.sockno,msg,500,0)) > 0) {
-		msg[len] = '\0';
-		
-		
-		
-		
-		send_to_all(msg, cl.sockno, cl.target);
-		
-		
-		
-		
-		memset(msg,'\0',sizeof(msg));
-	}
-	pthread_mutex_lock(&mutex);
-	printf("%s disconnected\n", cl.ip);
-	for(i = 0; i < n; i++) {
-		if(clients[i] == cl.sockno) {
-			j = i;
-			while(j < n-1) {
-				clients[j] = clients[j+1];
-				j++;
-			}
-		}
-	}
-	n--;
-	pthread_mutex_unlock(&mutex);
+    user_t user = *(user_t *)arg;
+    char msg[500];
+    int len;
+
+    while ((len = recv(user.sock, msg, sizeof(msg), 0)) > 0) {
+        msg[len] = '\0';
+
+        // expected format: target:message
+        char target[100], text[400];
+
+        char *sep = strchr(msg, ':');
+        if (!sep) continue;
+
+        *sep = '\0';
+        strcpy(target, msg);
+        strcpy(text, sep + 1);
+
+        pthread_mutex_lock(&mutex);
+
+        // lookup destination socket
+        int dest_sock = find_socket(target);
+
+        if (dest_sock != -1) {
+            char out[600];
+
+            // format: sender:message
+            snprintf(out, sizeof(out), "%s: %s", user.name, text);
+            send(dest_sock, out, strlen(out), 0);
+        } else {
+            char err[] = "User not online\n";
+            send(user.sock, err, strlen(err), 0);
+        }
+
+        pthread_mutex_unlock(&mutex);
+    }
+
+    // remove user on disconnect
+    pthread_mutex_lock(&mutex);
+
+    for (int i = 0; i < user_count; i++) {
+        if (users[i].sock == user.sock) {
+            for (int j = i; j < user_count - 1; j++) {
+                users[j] = users[j + 1];
+            }
+            user_count--;
+            break;
+        }
+    }
+
+    pthread_mutex_unlock(&mutex);
+
+    close(user.sock);
+    return NULL;
 }
-int main(int argc,char *argv[])
+
+int main(int argc, char *argv[])
 {
-	struct sockaddr_in my_addr,their_addr;
-	int server_socket;
-	int client_socket;
-	socklen_t their_addr_size;
-	int portno;
-	
-	
-	pthread_t  thread_recv_ID; /* Thread ID from pthread_create()*/
+    if (argc != 2) {
+        printf("Usage: ./server <port>\n");
+        exit(1);
+    }
 
-	
-	char msg[500];
-	int len;
-	struct client_info cl;
-	char ip[INET_ADDRSTRLEN];
-	
-	if(argc > 3) {
-		printf("too many arguments");
-		exit(1);
-	}
-	portno = atoi(argv[1]);
-	server_socket = socket(AF_INET,SOCK_STREAM,0);
-	memset(my_addr.sin_zero,'\0',sizeof(my_addr.sin_zero));
-	my_addr.sin_family = AF_INET;
-	my_addr.sin_port = htons(portno);
-	my_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-	
-	
-	their_addr_size = sizeof(their_addr);
+    int port = atoi(argv[1]);
 
-	if(bind(server_socket,(struct sockaddr *)&my_addr,sizeof(my_addr)) != 0) {
-		perror("binding unsuccessful");
-		exit(1);
-	}
+    // create TCP socket
+    int server_sock = socket(AF_INET, SOCK_STREAM, 0);
 
-	if(listen(server_socket, 5) != 0) {
-		perror("listening unsuccessful");
-		exit(1);
-	}
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
 
-	while(1) {
-		if((client_socket = accept(server_socket,(struct sockaddr *)&their_addr,&their_addr_size)) < 0) {
-			perror("accept unsuccessful");
-			exit(1);
-		}
-		pthread_mutex_lock(&mutex);
-		inet_ntop(AF_INET, (struct sockaddr *)&their_addr, ip, INET_ADDRSTRLEN);
-		printf("%s connected\n",ip);
-		printf("New Client connected from port# %d and IP %s\n", ntohs(their_addr.sin_port), inet_ntoa(their_addr.sin_addr));
-		cl.sockno = client_socket;
-		
-		cl.target[100] = client_socket;
-		
-		
-		strcpy(cl.ip,ip);
-		clients[n] = client_socket;
-		n++;
-		pthread_create(&thread_recv_ID, NULL, thread_recv_msg, &cl); /* Create server receiver thread */
-		pthread_mutex_unlock(&mutex);
-	}
-	return 0;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+
+    // bind socket
+    if (bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("bind failed");
+        exit(1);
+    }
+
+    // listen for clients
+    listen(server_sock, 10);
+
+    printf("Server running on port %d\n", port);
+
+    while (1) {
+        struct sockaddr_in client_addr;
+        socklen_t len = sizeof(client_addr);
+
+        // accept new client
+        int client_sock = accept(server_sock,
+                                  (struct sockaddr *)&client_addr,
+                                  &len);
+
+        // first message = username
+        char name[100];
+        recv(client_sock, name, sizeof(name), 0);
+
+        name[strcspn(name, "\n")] = 0;
+
+        printf("User connected: %s\n", name);
+
+        pthread_mutex_lock(&mutex);
+
+        // store user in table
+        strcpy(users[user_count].name, name);
+        users[user_count].sock = client_sock;
+        user_count++;
+
+        pthread_mutex_unlock(&mutex);
+
+        // allocate per-thread user copy
+        user_t *u = malloc(sizeof(user_t));
+        strcpy(u->name, name);
+        u->sock = client_sock;
+
+        pthread_t tid;
+        pthread_create(&tid, NULL, handle_client, u);
+    }
+
+    return 0;
 }
