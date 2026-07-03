@@ -1,4 +1,4 @@
-# Lab 2 — Fourier Series and Network (Séries de Fourier et réseau)
+# Lab 2 - Fourier Series and Network (Séries de Fourier et réseau)
 
 ## Objective
 
