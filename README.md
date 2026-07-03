@@ -1,6 +1,6 @@
 # CEG3585 - Introduction to Data Communications and Networking
 
-Coursework for **CEG3585** at the University of Ottawa: labs and assignments spanning the physical, data link, and network layers of the OSI reference model.
+Coursework for **CEG3585** at the University of Ottawa, 2023: labs and assignments spanning the physical, data link, and network layers of the OSI reference model.
 
 ## Course scope
 
