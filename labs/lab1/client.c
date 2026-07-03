@@ -10,87 +10,88 @@
 
 char username[100];
 
-
+// Receive thread: continuously receives messages from server
 void *thread_recv_msg(void *sock)
 {
+    int their_sock = *((int *)sock);
+    char msg[500];
+    int len;
 
-	
+    while ((len = recv(their_sock, msg, 500, 0)) > 0) {
+        msg[len] = '\0';
+        fputs(msg, stdout);
+        memset(msg, 0, sizeof(msg));
+    }
 
-	int their_sock = *((int *)sock);
-	char msg[500];
-	int len;
-	while((len = recv(their_sock, msg, 500, 0)) > 0) {
-		msg[len] = '\0';
-		fputs(msg,stdout);
-		memset(msg,'\0',sizeof(msg));
-	}
+    return NULL;
 }
-
-
 
 int main(int argc, char *argv[])
 {
-	struct sockaddr_in their_addr ;
-	int client_socket;
-	int portno;
-	pthread_t thread_recv_ID;
-	char msg[500];
-	
-	char res[600];
-	char ip[INET_ADDRSTRLEN];
-	int len;
-	
-	
-	
-	char target[100];
-	
-	
-	
-	
-	if(argc > 4) {
-		printf("too many arguments");
-		exit(1);
-	}
-	portno = atoi(argv[3]);//converts str to int
-	strcpy(username,argv[2]); //copies string from right side into left
-	
-	
-	strcpy(target,argv[1]); //copies string from right side into left
-	
-	
-	
-	
-	client_socket = socket(AF_INET,SOCK_STREAM,0);
-	memset(their_addr.sin_zero,'\0', sizeof(their_addr.sin_zero));
-	their_addr.sin_family = AF_INET;
-	their_addr.sin_port = htons(portno);
+    // argv[1] = server IP
+    // argv[2] = username
+    // argv[3] = port
 
-	
-	their_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    if (argc != 4) {
+        printf("Usage: ./client <server_ip> <username> <port>\n");
+        exit(1);
+    }
 
-	if(connect(client_socket,(struct sockaddr *)&their_addr, sizeof(their_addr)) < 0) {
-		perror("connection not esatablished");
-		exit(1);
-	}
-	inet_ntop(AF_INET, (struct sockaddr *)&their_addr, ip, INET_ADDRSTRLEN);
-	printf("connected to %s, start chatting\n",ip);
-	
-	
-	
-	pthread_create(&thread_recv_ID, NULL,thread_recv_msg,&client_socket); /* Create server receiver thread */
-	while(fgets(msg,500,stdin) > 0) { // reads a line from stdin and stores into msg, for 500-1 characters
-		strcpy(res,username);
-		strcat(res,":");		//add 2 strings together (strcat("hello ", "world") returns hello world (stored in res)
-		strcat(res,msg);		
-		len = write(client_socket,res,strlen(res)); //writes strlen(res) bytes from buffer pointed by res, to client_socket file descriptor
-		if(len < 0) {
-			perror("message not sent");
-			exit(1);
-		}
-		memset(msg,'\0', sizeof(msg)); //memset() is used to fill a block of memory with a particular value.
-		memset(res,'\0', sizeof(res));
-	}
-	pthread_join(thread_recv_ID, NULL);//wait for thread termination.
-	close(client_socket);
+    char *server_ip = argv[1];
+    strcpy(username, argv[2]);
+    int port = atoi(argv[3]);
 
+    // socket setup
+    int client_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    server_addr.sin_addr.s_addr = inet_addr(server_ip);
+
+    // CONNECT
+    if (connect(client_socket,
+                (struct sockaddr *)&server_addr,
+                sizeof(server_addr)) < 0) {
+        perror("connection not established");
+        exit(1);
+    }
+
+    printf("Connected to server\n");
+
+    // register username
+    send(client_socket, username, strlen(username), 0);
+
+    // receiver thread
+    pthread_t thread_recv_ID;
+    pthread_create(&thread_recv_ID, NULL, thread_recv_msg, &client_socket);
+
+    char msg[500];
+    char out[600];
+    int len;
+
+    // message loop
+    while (fgets(msg, sizeof(msg), stdin) != NULL) {
+
+        msg[strcspn(msg, "\n")] = 0;
+
+        snprintf(out, sizeof(out), "%s:%s", username, msg);
+
+        len = send(client_socket, out, strlen(out), 0);
+
+        if (len < 0) {
+            perror("send failed");
+            break;
+        }
+
+        memset(msg, 0, sizeof(msg));
+        memset(out, 0, sizeof(out));
+    }
+
+    pthread_join(thread_recv_ID, NULL);
+    close(client_socket);
+
+    return 0;
 }
