@@ -50,7 +50,8 @@ void *handle_client(void *arg)
         
         *sep = '\0';
         
-        snprintf(target, sizeof(target), "%s", msg);
+        strncpy(target, msg, sizeof(target) - 1);
+        target[sizeof(target) - 1] = '\0';
         snprintf(text, sizeof(text), "%s", sep + 1);
         
         text[strcspn(text, "\r\n")] = 0;
