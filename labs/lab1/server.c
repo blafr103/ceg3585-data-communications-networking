@@ -39,7 +39,7 @@ void *handle_client(void *arg)
     char msg[500];
     int len;
 
-    while ((len = recv(user.sock, msg, sizeof(msg), 0)) > 0) {
+    while ((len = recv(user.sock, msg, sizeof(msg) - 1, 0)) > 0) {
         msg[len] = '\0';
 
         // expected format: target:message
@@ -47,10 +47,13 @@ void *handle_client(void *arg)
 
         char *sep = strchr(msg, ':');
         if (!sep) continue;
-
+        
         *sep = '\0';
-        strcpy(target, msg);
-        strcpy(text, sep + 1);
+        
+        snprintf(target, sizeof(target), "%s", msg);
+        snprintf(text, sizeof(text), "%s", sep + 1);
+        
+        text[strcspn(text, "\r\n")] = 0;
 
         pthread_mutex_lock(&mutex);
 
@@ -61,8 +64,10 @@ void *handle_client(void *arg)
             char out[600];
 
             // format: sender:message
-            snprintf(out, sizeof(out), "%s: %s", user.name, text);
-            send(dest_sock, out, strlen(out), 0);
+            snprintf(out, sizeof(out), "%s: %s\n", user.name, text);
+            if (send(dest_sock, out, strlen(out), 0) < 0) {
+                perror("send failed");
+            }
         } else {
             char err[] = "User not online\n";
             send(user.sock, err, strlen(err), 0);
@@ -131,15 +136,37 @@ int main(int argc, char *argv[])
 
         // first message = username
         char name[100];
-        recv(client_sock, name, sizeof(name), 0);
-
-        name[strcspn(name, "\n")] = 0;
+        memset(name, 0, sizeof(name));
+        memset(name, 0, sizeof(name));
+        recv(client_sock, name, sizeof(name) - 1, 0);
+        name[sizeof(name) - 1] = '\0';
+        name[strcspn(name, "\r\n")] = 0;
 
         printf("User connected: %s\n", name);
 
         pthread_mutex_lock(&mutex);
 
         // store user in table
+        if (user_count >= MAX) {
+            close(client_sock);
+            pthread_mutex_unlock(&mutex);
+            continue;
+        }
+        
+        if (strlen(name) == 0) {
+            close(client_sock);
+            pthread_mutex_unlock(&mutex);
+            continue;
+        }
+        
+        for (int i = 0; i < user_count; i++) {
+            if (strcmp(users[i].name, name) == 0) {
+                close(client_sock);
+                pthread_mutex_unlock(&mutex);
+                continue;
+            }
+        }
+
         strcpy(users[user_count].name, name);
         users[user_count].sock = client_sock;
         user_count++;
@@ -153,6 +180,7 @@ int main(int argc, char *argv[])
 
         pthread_t tid;
         pthread_create(&tid, NULL, handle_client, u);
+        pthread_detach(tid);
     }
 
     return 0;
