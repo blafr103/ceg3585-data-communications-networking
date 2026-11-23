@@ -23,3 +23,4 @@ public class FourierF1 {
             System.out.printf("%.4f,%.6f%n", t, sum);
         }
 }
+}
