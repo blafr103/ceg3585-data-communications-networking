@@ -1,0 +1,4 @@
+# Compiled output
+*.class
+labs/lab1/client
+labs/lab1/server

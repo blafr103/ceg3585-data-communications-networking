@@ -1,6 +1,6 @@
 # CEG3585 - Introduction to Data Communications and Networking
 
-Coursework for **CEG3585** at the University of Ottawa, 2023: labs and assignments spanning the physical, data link, and network layers of the OSI reference model.
+Coursework for **CEG3585** at the University of Ottawa, 2023: labs spanning the physical, data link, and network layers of the OSI reference model.
 
 ## Course scope
 
@@ -16,11 +16,6 @@ Coursework for **CEG3585** at the University of Ottawa, 2023: labs and assignmen
 
 ```
 .
-├── assignments/
-│   ├── dev1/
-│   ├── dev2/
-│   ├── dev3/
-│   └── dev4/
 └── labs/
     ├── lab1/          # TCP/IP chat application (C)
     ├── lab2/          # Fourier series + network transport (Java)
@@ -54,26 +49,18 @@ java Client
 ```
 
 ### Lab 3 — B8ZS line coding over sockets (Java)
-An encoder (client) and decoder (server) communicating over a socket. The client reads a binary string from the keyboard and encodes it to B8ZS — represented as `+`, `-`, and `0` for positive pulse, negative pulse, and no signal, with the first `1` taken as positive polarity. After a request-to-send / ready-to-receive handshake, the encoded stream is transmitted; the server acknowledges, decodes it back to the original bitstream, and prints it.
+An encoder (client) and decoder (server) communicating over a socket. The client reads a binary string from the keyboard and encodes it to B8ZS — represented as `+`, `-`, and `0` for positive pulse, negative pulse, and no signal, with the first `1` taken as positive polarity. The lab also calls for a request-to-send / ready-to-receive handshake and for the server to decode the stream back to the original bits.
 
-Example: `1100000000110000010` → `+-000-+0+-+-00000+0` → decoded back to `1100000000110000010`.
+Example: `1100000000110000010` encodes to `+-000-+0+-+-00000+0`.
+
+**Status: partly complete.** The encoder works. The handshake and the server-side decoder are not implemented. See [`labs/lab3`](labs/lab3/) for details.
 
 ### Lab 4 — HDLC sliding window over a multipoint link (Java)
 Simulates a multipoint network with one primary and two secondary stations. The physical layer is emulated over sockets (`PhysicalLayer` / `PhysicalLayerServer`), HDLC entities handle the data link layer (`PrimaryHDLCDataLink` / `SecondaryHDLCDataLink`), and `PrimaryStation` / `SecondaryStation` are the applications exchanging a message.
 
-The implemented work completes `dlDataRequest()` in `SecondaryHDLCDataLink`: segmenting the message into I-frames of ≤ 32 data bytes, advancing send sequence numbers modulo the sequence space, and driving a size-4 anticipation (sliding) window acknowledged by RR frames. Error recovery is out of scope — no FCS, REJ, or SREJ.
+The task is to complete `dlDataRequest()` in `SecondaryHDLCDataLink`: segmenting the message into I-frames of ≤ 32 data bytes, advancing send sequence numbers modulo the sequence space, and driving a size-4 anticipation (sliding) window acknowledged by RR frames. Error recovery is out of scope — no FCS, REJ, or SREJ.
 
-Run each command in its own terminal, in order:
-```bash
-java PhysicalLayerServer
-java SecondaryStation 1
-java SecondaryStation 2
-java PrimaryStation
-```
-
-## Assignments
-
-Assignment folders (`dev1`–`dev4`) are reserved and will be populated as work is added.
+**Status: incomplete.** `dlDataRequest()` is unfinished and the lab does not compile as committed. See [`labs/lab4`](labs/lab4/) for details.
 
 ## Languages
 
